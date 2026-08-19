@@ -1,16 +1,16 @@
 # Shipwright Run State
 
-The run workspace is Shipwright's execution memory. Conversation is the interface; persisted run state is the source of truth for progress.
+The run workspace is Shipwright's execution memory. Conversation is the interface; persisted state is the source of truth for progress.
 
 ## Location
 
-Use `$SHIPWRIGHT_RUN_ROOT` when set. Otherwise use the platform's writable temporary directory:
+Use `$SHIPWRIGHT_RUN_ROOT` when set. Otherwise use the platform writable temporary directory:
 
 ```text
 <temp>/shipwright/<repository-fingerprint>/<run-id>/
 ```
 
-The repository fingerprint should be derived from the canonical repository path or remote identity without exposing secrets. The run ID should be unique and human-readable enough to resume.
+The fingerprint derives from canonical repository path/remote identity without exposing secrets.
 
 ## Required files
 
@@ -24,54 +24,33 @@ review/
 workspaces/
 ```
 
-`workspaces/` is optional and exists only when separate writer worktrees/workspaces are needed.
+`workspaces/` is optional.
 
-## State shape
+## State
 
-Keep `state.json` compact. Minimum fields:
+Keep `state.json` compact. Track run ID, repository/baseline branch+SHA, mode/request, phase, requested/actual controller route, requirements/architecture/diagnosis/plan status, lanes, candidate SHA, review tier/attempt/status, verification, Git state, blockers and updated timestamp.
 
-```json
-{
-  "run_id": "...",
-  "repository": "...",
-  "baseline_branch": "...",
-  "baseline_sha": "...",
-  "mode": "NEW_IMPLEMENTATION | CHANGE",
-  "request": "...",
-  "phase": "ORIENTATION | REQUIREMENTS | ARCHITECTURE | PLANNING | IMPLEMENTATION | REVIEW | VERIFICATION | GIT | COMPLETE | BLOCKED",
-  "requirements": "NOT_STARTED | IN_PROGRESS | RESOLVED | BLOCKED",
-  "architecture": "NOT_STARTED | IN_PROGRESS | READY | BLOCKED",
-  "plan": "NOT_STARTED | READY | STALE",
-  "lanes": [],
-  "candidate_sha": null,
-  "review": "NOT_STARTED | IN_PROGRESS | PASS | CORRECTION_REQUIRED",
-  "verification": "NOT_STARTED | PASS | FAIL",
-  "git": "NOT_STARTED | COMMITTED | PUSHED | PUSH_NOT_AUTHORIZED",
-  "blockers": [],
-  "updated_at": "..."
-}
-```
-
-Lane records should contain only execution-relevant state: lane ID, objective, dependencies, status, workspace, owner/agent context identifier when available, result/evidence pointers, and integrated commit/candidate identity.
+Each lane records ID/objective, dependencies, status, workspace, requested profile/model/reasoning, actual profile/model/reasoning, evidence pointer and integrated candidate/commit identity.
 
 ## Transition rule
 
 Before every material transition:
 
 1. read `state.json`;
-2. confirm the current phase and prerequisites;
+2. confirm current phase/prerequisites;
 3. perform one legal next action;
-4. persist the result immediately;
-5. then dispatch or transition again.
+4. persist result immediately;
+5. only then dispatch/transition again.
 
-Do not infer phase progress from the conversation when persisted state exists.
+Do not infer progress from conversation when persisted state exists.
 
-## Legal high-level transitions
+## High-level transitions
 
 ```text
 ORIENTATION -> REQUIREMENTS
 REQUIREMENTS -> ARCHITECTURE | BLOCKED
-ARCHITECTURE -> PLANNING | REQUIREMENTS | BLOCKED
+ARCHITECTURE -> DIAGNOSIS | PLANNING | REQUIREMENTS | BLOCKED
+DIAGNOSIS -> PLANNING | REQUIREMENTS | ARCHITECTURE | BLOCKED
 PLANNING -> IMPLEMENTATION | BLOCKED
 IMPLEMENTATION -> REVIEW | PLANNING | BLOCKED
 REVIEW -> VERIFICATION | IMPLEMENTATION | PLANNING | BLOCKED
@@ -79,29 +58,12 @@ VERIFICATION -> GIT | IMPLEMENTATION | BLOCKED
 GIT -> COMPLETE | BLOCKED
 ```
 
-Returning to `PLANNING` means material dependency/scope/architecture implications changed and the old decomposition is stale.
+Returning to PLANNING means old decomposition is stale.
 
 ## Resume
 
-For `$shipwright resume`:
+For `$shipwright resume`, identify current repository, locate non-terminal runs for its fingerprint, choose newest unless multiple are plausibly active, re-read persisted phase artifacts, verify repository baseline/candidate did not materially diverge, then resume from next legal transition.
 
-1. identify the current repository;
-2. locate non-terminal runs for its fingerprint;
-3. choose the newest run unless more than one is plausibly active, in which case ask the user to choose;
-4. re-read all persisted phase artifacts required by `state.json`;
-5. verify the repository baseline/candidate has not materially diverged;
-6. resume from the next legal transition.
+`$shipwright resume <run-id>` selects the run explicitly and applies the same consistency checks.
 
-For `$shipwright resume <run-id>`, select that run directly and perform the same consistency checks.
-
-## Cleanup
-
-Do not delete a blocked or interrupted run.
-
-After `COMPLETE`:
-
-- preserve only evidence the user/repository workflow explicitly requires;
-- remove run-owned worktrees/temp clones/process artifacts;
-- the run directory may then be removed or retained according to user policy.
-
-Never delete unrelated temporary files.
+Do not delete blocked/interrupted runs. After COMPLETE, remove only run-owned worktrees/temp clones/process artifacts; preserve only evidence user/repository policy requires. Never delete unrelated temporary files.

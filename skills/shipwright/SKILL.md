@@ -1,76 +1,103 @@
 ---
 name: shipwright
-description: End-to-end software delivery orchestration for Codex. Use when the user wants to implement a feature, module, product change, refactor with changed behavior, or other bounded software outcome from a short requirement through requirement completeness, architecture, dependency-aware implementation, independent review, verification, and Git completion. Shipwright maintains durable run state outside the product repository so long-running work can continue without relying on conversational memory.
+description: End-to-end software delivery orchestration for Codex. Use when the user wants to implement a feature, module, product change, behavior-changing refactor, defect correction, or other bounded software outcome from a short requirement through requirement completeness, architecture, GPT-5.6-optimized dependency-aware implementation, independent review, verification, and Git completion. Shipwright persists durable run state outside the product repository so long-running work does not depend on conversational memory.
 ---
 
 # Shipwright
 
 Shipwright takes a software intent from **request to reviewed delivery**.
 
-Use it for both:
+Use it for:
 
 - `NEW_IMPLEMENTATION` — a new capability, feature, module, integration, or substantial implementation;
-- `CHANGE` — an intentional change to an existing product, behavior, workflow, API, UI, data flow, or technical capability.
+- `CHANGE` — an intentional change to existing behavior, workflow, API, UI, data flow, architecture, or technical capability;
+- `CHANGE_WITH_DIAGNOSIS` — a requested correction where the actual cause must be established before the desired outcome can be implemented.
 
-A one-sentence request is valid input. Do not require the user to provide an implementation plan.
+A one-sentence request is valid input. Do not require the user to supply an implementation plan.
 
-## Core contract
-
-Run the following lifecycle to completion:
+## Core lifecycle
 
 ```text
 INTENT
   -> repository orientation
   -> requirement completeness
-  -> resolved requirement authority
+  -> resolved Requirement Authority
   -> architecture assessment / resolution
   -> dependency-first execution plan
   -> bounded implementation
   -> integration
   -> independent review
-  -> corrections + re-review when needed
+  -> corrections + fresh re-review
   -> verification
   -> exact Git completion
 ```
 
-The primary Codex session is the **controller**. It owns execution state and coordination, not substantive product or architecture decisions.
+The run workspace is execution memory. The controller follows persisted state; conversation is only the interface.
+
+Read these references as needed:
+
+- `references/model-routing.md`
+- `references/run-state.md`
+- `references/requirements.md`
+- `references/architecture.md`
+- `references/execution.md`
+- `references/review-and-completion.md`
+
+## GPT-5.6 optimized topology
+
+Preferred routes:
+
+```text
+Controller / long-running orchestration
+  shipwright-controller -> gpt-5.6-luna / xhigh
+
+Repository orientation
+  shipwright-scout -> gpt-5.6-luna / medium
+
+Requirement Authority
+  shipwright-analyst -> gpt-5.6-sol / high
+
+Architecture
+  shipwright-architect -> gpt-5.6-sol / high
+
+Dependency decomposition
+  shipwright-decomposer -> gpt-5.6-sol / high
+
+Diagnosis
+  shipwright-investigator -> gpt-5.6-luna / max
+  shipwright-investigator-hard -> gpt-5.6-terra / high
+
+Implementation
+  SIMPLE -> shipwright-builder-simple -> gpt-5.6-luna / medium
+  MEDIUM -> shipwright-builder -> gpt-5.6-luna / max
+  HARD -> shipwright-builder-hard -> gpt-5.6-terra / high
+
+Independent review
+  STANDARD -> shipwright-reviewer -> gpt-5.6-sol / medium
+  DEEP -> shipwright-reviewer-deep -> gpt-5.6-sol / high
+```
+
+Do not silently replace an intended route with another model/effort. If a bundled route cannot launch, emit `MODEL_ROUTE_UNAVAILABLE`, state the requested route and known alternatives, and ask whether to continue with an explicit fallback. Persist requested and actual routes.
+
+For best token efficiency, the parent Shipwright session should run on `gpt-5.6-luna` with `xhigh` reasoning. If it does not, record `CONTROLLER_ROUTE_FALLBACK`; do not let the controller compensate by taking substantive reasoning work from designated agents.
 
 ## Controller decision firewall
 
-The controller may:
+The controller may inspect state, create/maintain the run workspace, dispatch/wait/resume agents, apply deterministic routing, integrate non-conflicting completed work, run verification, record evidence/state, perform authorized Git handoff, and escalate blockers.
 
-- inspect repository and run state;
-- create and maintain the run workspace;
-- dispatch fresh reasoning, implementation, and review contexts;
-- wait for dependencies and resume ready work;
-- apply deterministic routing rules;
-- integrate non-conflicting completed work;
-- run verification commands;
-- record evidence and state transitions;
-- commit/push when authorized;
-- escalate blocked decisions.
+The controller must not invent, silently default, or reinterpret substantive product behavior, acceptance, architecture, technology, ownership, data semantics, public contracts, security/privacy policy, migration strategy, material UX, or scope.
 
-The controller must **not** invent, silently default, or reinterpret substantive decisions about product behavior, acceptance, architecture, technology, ownership boundaries, data semantics, public contracts, security/privacy policy, migration strategy, material UX, or scope.
-
-Use specialized reasoning stages for those decisions and persist their outputs before implementation continues.
+Requirements, architecture, diagnosis, decomposition, implementation and review belong to their designated agents.
 
 ## Durable run workspace
 
-Before material work, create a run workspace outside the product repository.
-
-Default root:
+Before material work, create or resume a run workspace outside the product repository. Use `$SHIPWRIGHT_RUN_ROOT` when set; otherwise use the platform writable temporary directory:
 
 ```text
-$SHIPWRIGHT_RUN_ROOT
+<temp>/shipwright/<repository-fingerprint>/<run-id>/
 ```
 
-If unset, use the platform's writable temporary directory and create:
-
-```text
-shipwright/<repository-fingerprint>/<run-id>/
-```
-
-The run workspace must contain at least:
+Minimum state:
 
 ```text
 state.json
@@ -86,202 +113,120 @@ Rules:
 
 1. Never commit Shipwright run artifacts to the product repository.
 2. Re-read `state.json` before every material transition or dispatch.
-3. Persist state immediately after every completed phase, blocker, lane result, review result, correction, verification result, and Git transition.
-4. Do not rely on conversational memory for execution progress.
+3. Persist immediately after each phase, blocker, agent/lane result, review, correction, verification and Git transition.
+4. Do not infer progress from conversation when persisted state exists.
 5. Preserve non-terminal run state if interrupted or blocked.
-6. Clean run-owned temporary workspaces only after terminal completion and required evidence has been recorded.
-7. `$shipwright resume` means locate the newest non-terminal run for the current repository and continue from its persisted state. `$shipwright resume <run-id>` selects an explicit run.
+6. Clean only run-owned temporary workspaces after terminal completion.
+7. `$shipwright resume` resumes the newest non-terminal run for the current repository; `$shipwright resume <run-id>` selects a run explicitly.
 
-Read `references/run-state.md` before creating or resuming a run.
+## Phase 1 — Orientation
 
-## Phase 1 — Orient before asking questions
+Use the smallest useful evidence first:
 
-Inspect the smallest useful repository surface first:
+1. repository instructions;
+2. Graphify query when Graphify is installed and current enough;
+3. `shipwright-scout` for bounded confirmation;
+4. native relationship/search tooling when graph evidence is unavailable.
 
-- repository instructions such as `AGENTS.md`;
-- relevant product/specification/design documentation when present;
-- current code and tests around the requested behavior;
-- dependency relationships and shared contracts;
-- current Git branch/SHA and working-tree state.
+Graphify is recommended for large repositories but is never required. Prefer scoped graph queries over broad source loading for relationship/orientation questions when available.
 
-Use repository graph/index tools when available and useful, but Shipwright must not depend on a specific graph product.
-
-For a `CHANGE`, establish the current accepted behavior and treat the user's requested delta as intentional. Preserve unspecified behavior unless later authority explicitly changes it.
-
-Record the orientation evidence in the run state without copying large source excerpts.
+Record baseline branch/SHA, working-tree state, relevant durable authority, relevant code/tests/contracts, current behavior for `CHANGE`, and observed failure evidence for `CHANGE_WITH_DIAGNOSIS`.
 
 ## Phase 2 — Requirement completeness
 
-Use a fresh **Requirements Analyst** reasoning context.
+Launch fresh `shipwright-analyst` (`gpt-5.6-sol`, high).
 
-The Requirements Analyst:
+The analyst consumes intent plus bounded evidence, builds a private completeness map, separates resolved facts from material unknowns, challenges vague/inconsistent requirements, and asks only compact questions that materially affect observable behavior, acceptance, scope, security/privacy, compatibility, migration or material UX.
 
-1. consumes the user's intent plus bounded repository evidence;
-2. builds a private completeness map;
-3. separates already-resolved facts from material unknowns;
-4. challenges vague or internally inconsistent requirements;
-5. asks the user only for decisions that materially affect observable behavior, acceptance, scope, security/privacy, compatibility, migration, or user experience;
-6. asks questions in compact decision-oriented batches rather than conducting an open-ended interview;
-7. repeats until no material requirement decision remains unresolved.
+For `CHANGE`, establish:
 
-Do not ask the user to restate repository facts that can be discovered.
+```text
+current accepted behavior
++
+requested delta
++
+preservation envelope
+```
 
-Small, explicit changes may pass this phase without questions.
+Unspecified behavior remains preserved.
 
-The phase output is `requirements.md`, containing concise resolved authority and `Open decisions: NONE` before architecture/implementation begins.
+Output `requirements.md` with `Open decisions: NONE` before architecture/implementation continues.
 
-Read `references/requirements.md` for the exact method and output contract.
+## Phase 3 — Architecture
 
-## Phase 3 — Architecture assessment and resolution
+Launch fresh `shipwright-architect` (`gpt-5.6-sol`, high).
 
-Use a fresh **Architect** reasoning context after requirement authority is complete enough to design against.
+First assess whether existing architecture is sufficient. Preserve it when it is. When a technical decision is required, the architect may resolve technical architecture inside approved Requirement Authority, including responsibility boundaries, persistence mechanics, concurrency/recovery, integrations, migrations, runtime/deployment mechanics and failure handling.
 
-The Architect must first determine whether the repository's existing architecture is sufficient.
+Return to the analyst/user rather than decide missing product behavior, public compatibility, security/privacy policy, irreversible business semantics, material vendor/cost commitments, or material UX/scope.
 
-If sufficient:
+No material writer dispatch until `requirements: RESOLVED` and `architecture: READY`.
 
-- preserve it;
-- identify the applicable patterns/contracts;
-- avoid architecture churn.
+## Phase 4 — Diagnosis when needed
 
-If insufficient:
+Ordinary `NEW_IMPLEMENTATION` and intentional `CHANGE` do not require diagnosis.
 
-- make the technical architecture decisions required to implement the resolved requirements;
-- prefer consistency with established repository patterns unless they are demonstrably unsuitable;
-- document alternatives only when the choice is material;
-- record the selected architecture and rationale in `architecture.md`.
+For `CHANGE_WITH_DIAGNOSIS`, launch `shipwright-investigator` / Luna max for bounded diagnosis, or `shipwright-investigator-hard` / Terra high when cross-layer/stateful/concurrency/recovery-sensitive or still difficult after one bounded investigation.
 
-The Architect may autonomously make **technical architecture decisions** that stay inside resolved product authority.
+Investigators are read-only. If diagnosis changes Requirement Authority or architecture assumptions, return to Analyst/Architect before planning.
 
-It must not silently decide a missing product requirement or materially change externally visible behavior, acceptance meaning, security/privacy policy, irreversible data semantics, public contracts, material vendor/operational commitments, or user scope. Those return to the Requirements Analyst/user decision loop.
+## Phase 5 — Dependency-first planning
 
-No implementation lane may be created for material work until architecture is `READY`.
+Launch fresh `shipwright-decomposer` (`gpt-5.6-sol`, high).
 
-Read `references/architecture.md`.
+Build the dependency model before cutting lanes. Each lane must include objective, predecessors, owned scope, shared/prohibited hotspots, verification boundary, parallel wave, `SIMPLE | MEDIUM | HARD`, and exact writer route.
 
-## Phase 4 — Dependency-first execution planning
+Optimize for correctness, dependency order, maximum safe parallelism, minimal shared-write contention, minimal writer context, lowest-cost capable route, and behavioral/verification cohesion.
 
-Use a fresh **Decomposer** reasoning context.
+Persist `plan.md` and lane routes before dispatch.
 
-The Decomposer consumes only resolved requirement authority, architecture, repository evidence, and current state. It must build the dependency model **before** cutting work into lanes.
+## Phase 6 — Implementation and integration
 
-For each lane, establish:
+Dispatch only the decomposer-selected writer:
 
-- objective and owned scope;
-- predecessors/dependencies;
-- shared or prohibited hotspots;
-- verification boundary;
-- safe parallel group/wave;
-- implementation complexity: `SIMPLE | MEDIUM | HARD`;
-- the appropriate available coding-agent capability.
+```text
+SIMPLE -> shipwright-builder-simple -> Luna medium
+MEDIUM -> shipwright-builder -> Luna max
+HARD   -> shipwright-builder-hard -> Terra high
+```
 
-Optimize for the smallest coherent independently implementable and independently verifiable lanes, not the maximum number of agents.
+Give each writer only lane objective, applicable Requirement Authority, applicable architecture, owned scope, dependencies, shared/prohibited hotspots, and focused verification expectations.
 
-Use safe parallelism aggressively when dependencies and write ownership permit it. Serialize shared hotspots.
+Writers may make local implementation choices inside established authority and architecture; they must not redesign product/architecture/scope.
 
-Persist the complete plan to `plan.md` and `state.json` before writer dispatch.
+Fan out only dependency-independent and write-safe lanes. Use run-owned temporary worktrees/workspaces when separation is needed. Persist requested/actual route and result after each lane.
 
-Read `references/execution.md`.
+If integration changes material dependencies, authority, architecture assumptions, hotspots or verification boundaries, mark plan stale and re-run the appropriate reasoning stage.
 
-## Phase 5 — Implementation and integration
+## Phase 7 — Independent review
 
-Dispatch fresh bounded implementation contexts.
+Every material candidate gets a fresh reviewer that did not implement/correct it.
 
-Each writer receives only what it needs:
+```text
+STANDARD -> shipwright-reviewer -> gpt-5.6-sol / medium
+DEEP     -> shipwright-reviewer-deep -> gpt-5.6-sol / high
+```
 
-- resolved lane objective;
-- relevant requirement authority;
-- relevant architecture;
-- owned paths/capabilities;
-- prohibited/shared hotspots;
-- dependency assumptions;
-- focused verification expectations.
+Use DEEP for high-consequence security/privacy, migrations/data integrity, public/shared contracts, concurrency/recovery, architecture-sensitive or broad cross-layer changes, or difficult correction history.
 
-Writers may make local implementation choices within established architecture and authority. They must not redesign product/architecture/scope on their own.
+Review is blind-first. First provide candidate diff/state, relevant relationships and evidence without Requirement Authority, architecture rationale or implementer narrative. Persist `BLIND_RECONSTRUCTION_RECORDED`. Then reveal requirements/architecture and reconcile actual behavior against authority.
 
-Prefer the least expensive available coding capability that can safely complete the lane; use stronger coding/reasoning capability for genuinely harder lanes. Shipwright must not require specific model names.
+Material mismatch blocks acceptance. Every corrected candidate gets a new reviewer context and new blind phase. External audit is optional, never required.
 
-A writer does not independently redefine Git authority. The controller tracks and integrates the exact candidate.
+## Phase 8 — Verification and Git completion
 
-When separate writable workspaces/worktrees are useful, place run-owned execution workspaces under the run workspace or another writable temporary location. They are execution artifacts, never authoritative repository state.
+After review acceptance, run risk-proportional repository-native verification: focused tests, integration/runtime checks, regression proportional to blast radius, build/lint/type/static checks, visual evidence when material, and migration/deployment checks when changed.
 
-After each lane finishes:
+Only commit the exact reviewed and verified candidate. Push only when authorized/required and verify remote equality when pushed.
 
-1. record result/evidence;
-2. update state;
-3. integrate only when predecessors and conflict constraints permit;
-4. refresh dependency evidence if the implementation materially changes relationships.
+Before `COMPLETE`, verify changed paths remain in scope, required review/verification passed, final SHA is recorded, repository cleanliness is established excluding unrelated pre-existing state, and run-owned temporary workspaces are cleaned.
 
-## Phase 6 — Independent review
-
-Every material candidate receives independent review in a **fresh reviewer context that did not implement the candidate**.
-
-Use two phases:
-
-### Phase A — blind reconstruction
-
-Give the reviewer:
-
-- exact candidate diff/state;
-- relevant tests and execution evidence;
-- affected relationships/runtime evidence;
-- no original requirement narrative, architecture rationale, implementer reasoning, correction narrative, or expected answer.
-
-The reviewer records:
-
-- what behavior actually changed;
-- apparent purpose;
-- true affected scope;
-- assumptions/contracts changed or introduced;
-- implied edge cases/failure modes.
-
-Persist the reconstruction before revealing authority.
-
-### Phase B — authority reconciliation
-
-Then reveal the resolved requirements and architecture. The reviewer explicitly reconciles reconstructed behavior against them and checks correctness, completeness, regressions, security/compatibility implications, maintainability, evidence sufficiency, and unexplained scope.
-
-Material mismatch blocks acceptance.
-
-Corrections return to a bounded writer. Every corrected material candidate is reviewed again in a **new fresh reviewer context** starting with a new blind phase.
-
-An external audit is optional; it is not required by Shipwright.
-
-Read `references/review-and-completion.md`.
-
-## Phase 7 — Verification and Git completion
-
-After review acceptance, run risk-proportional verification using the repository's actual toolchain:
-
-- focused unit/component tests;
-- integration/runtime checks where relevant;
-- regression tests proportional to blast radius;
-- build/lint/type/static checks where applicable;
-- visual/runtime evidence when UI correctness is material;
-- migration/deployment checks when changed.
-
-Complete Git handoff only for the **exact reviewed and verified candidate**.
-
-Default completion behavior:
-
-1. commit the reviewed candidate when repository/user policy permits;
-2. push when remote write authorization is clear or the user/repository workflow requires it;
-3. otherwise stop at the exact reviewed local commit and report that push was not authorized;
-4. verify changed paths remain within resolved scope;
-5. verify repository cleanliness excluding explicitly unrelated pre-existing state;
-6. record final SHA/ref/evidence in run state;
-7. clean run-owned temporary workspaces after terminal state.
-
-Never claim completion when review, required verification, commit, or an authorized required push is still pending.
-
-## Completion report
-
-Return a concise terminal report:
+## Terminal report
 
 ```text
 SHIPWRIGHT COMPLETE
 Request: <short outcome>
-Mode: NEW_IMPLEMENTATION | CHANGE
+Mode: NEW_IMPLEMENTATION | CHANGE | CHANGE_WITH_DIAGNOSIS
 Requirements: RESOLVED
 Architecture: READY
 Implementation: COMPLETE
@@ -290,6 +235,7 @@ Verification: PASS
 Final commit: <sha>
 Remote: <ref/sha | NOT_PUSHED — reason>
 Run state: <path>
+Model routes: <summary>
 ```
 
-For a blocked run, report the exact phase, persisted run path, missing decision/dependency, and the precise next action. Do not discard the run state.
+For blocked work, persist the run and report exact phase, blocker, decision/dependency needed, run path and next legal action.

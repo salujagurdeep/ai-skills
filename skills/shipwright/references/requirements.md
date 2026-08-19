@@ -2,117 +2,77 @@
 
 Shipwright accepts a short request, but implementation must not begin while material product intent remains ambiguous.
 
-## Requirements Analyst role
+## Agent route
 
-Use a fresh reasoning context. The analyst is allowed to reason about product requirements, challenge the request, and ask the user for missing product decisions. The controller is not.
+```text
+Profile: shipwright-analyst
+Model: gpt-5.6-sol
+Reasoning: high
+Mode: read-only
+```
 
-## Step 1 — Evidence first
+Use a fresh analyst context. The analyst may reason about product requirements, challenge the request and ask the user for missing product decisions. The controller may not.
 
-Before asking questions, inspect the smallest relevant repository evidence:
+## Evidence first
 
-- existing behavior and tests;
-- product/specification documentation when present;
-- current UI/API/data contracts relevant to the request;
-- repository instructions and compatibility constraints;
-- neighboring features that establish precedent.
+Inspect the smallest relevant repository evidence before asking questions: existing behavior/tests, product/specification documentation, relevant UI/API/data contracts, repository instructions/compatibility constraints, and neighboring precedent. Use Graphify relationship queries when available and useful.
 
-Do not ask the user for facts that can be established from the repository.
+Do not ask the user for facts that repository evidence can establish.
 
-## Step 2 — Classify the request
+## Classify
 
 Exactly one:
 
 ```text
 NEW_IMPLEMENTATION
 CHANGE
+CHANGE_WITH_DIAGNOSIS
 ```
 
-For `CHANGE`, identify:
+For `CHANGE` modes identify current accepted behavior, explicit requested delta and preservation envelope. Everything unspecified remains preserved unless the requirement loop explicitly changes it.
 
-```text
-current accepted behavior
-+
-explicit requested delta
-```
+`CHANGE_WITH_DIAGNOSIS` additionally records observed symptom/evidence; causal diagnosis happens later in an investigator lane.
 
-Everything unspecified remains preserved unless the requirement loop explicitly changes it.
+## Private completeness map
 
-## Step 3 — Private completeness map
+Evaluate only applicable dimensions: objective/outcome, actors/permissions, happy path, states/lifecycle, validation/error behavior, persistence/session behavior, cross-system interaction, public API/event/data behavior, destructive/money/security/privacy implications, compatibility/migration, material UX, non-functional constraints affecting implementation, and acceptance evidence.
 
-Evaluate only applicable dimensions:
+Mark each privately `RESOLVED | N/A | OPEN`.
 
-- objective/outcome;
-- actors/roles/permissions;
-- primary happy path;
-- states and lifecycle;
-- validation and error behavior;
-- persistence/session behavior;
-- cross-module/system interactions;
-- externally visible API/event/data behavior;
-- destructive/money/security/privacy implications;
-- compatibility/migration expectations;
-- materially important UX behavior;
-- non-functional constraints that affect implementation;
-- acceptance evidence.
+## Focused challenge loop
 
-Mark each `RESOLVED | N/A | OPEN` privately.
+Ask only `OPEN` decisions that can materially change implementation or acceptance. Keep questions compact, expose tradeoffs when useful, prefer concrete choices, challenge vague observable terms, group related questions into small batches, and do not reopen settled decisions without contradictory evidence.
 
-## Step 4 — Focused challenge loop
+Do not manufacture questions for a small explicit change whose behavior/blast radius are already clear.
 
-Ask only `OPEN` decisions that could materially change implementation or acceptance.
+## Requirement Authority
 
-Questions should:
-
-- be compact;
-- expose tradeoffs when useful;
-- prefer concrete choices over broad prompts;
-- challenge vague words such as "fast", "secure", "simple", "same", or "support" when observable behavior depends on them;
-- group related questions into a small batch;
-- avoid reopening settled decisions without contradictory evidence.
-
-Example:
-
-```text
-The request is clear except for two decisions:
-1. Should saved drafts survive sign-out, or only browser/session restart?
-2. When a referenced record is deleted, should the draft fail to reopen or reopen with the missing item removed?
-```
-
-Do not manufacture questions for a small explicit change whose behavior and blast radius are already clear.
-
-## Step 5 — Requirement authority output
-
-Write `requirements.md` in the run workspace:
+Write concise `requirements.md`:
 
 ```text
 # Requirement Authority
-
-Mode: NEW_IMPLEMENTATION | CHANGE
+Mode: NEW_IMPLEMENTATION | CHANGE | CHANGE_WITH_DIAGNOSIS
 
 ## Objective
-<observable outcome>
-
+...
 ## Current behavior
-<CHANGE only; concise>
-
+<CHANGE modes only>
+## Requested delta
+<CHANGE modes only>
+## Preservation envelope
+...
 ## Required behavior
 - ...
-
 ## States / edge cases
 - ...
-
 ## Constraints / compatibility
 - ...
-
 ## Acceptance
 - ...
-
 ## Explicitly out of scope
 - ...
 
 Open decisions: NONE
 ```
 
-Do not copy large requirement documents into the run workspace. Reference repository paths/IDs where existing durable authority already exists.
-
-If product intent cannot be resolved without the user, set requirement state to `BLOCKED` and persist the exact decision request.
+Reference durable repository authority rather than duplicating large documents. If product intent cannot be resolved without the user, set requirements `BLOCKED` and persist the exact decision request.
