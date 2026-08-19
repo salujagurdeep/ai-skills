@@ -1,0 +1,6 @@
+interface:
+  display_name: "Shipwright"
+  short_description: "Intent to reviewed, verified software"
+  default_prompt: "Use $shipwright to take this implementation or product change from requirement analysis through architecture, dependency-aware execution, independent review, verification, and Git completion."
+policy:
+  allow_implicit_invocation: false
